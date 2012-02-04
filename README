@@ -1,0 +1,20 @@
+				README
+
+Pony Cloud se compose de trois parties
+
+ - master.py                      le serveur de management et l'interface
+ - master.sqlite                  la base de données où tous enregistré
+ - slave.py                       le client pour le slave sur les noeud du cloud
+ - slave.id                       le paire_id du client stocké dans un fichier
+ - http://pastebin.com/4KT5y5Ex   les parametres public pour joindre le master
+
+
+Les répertoires :
+
+ - Sur le master        représente l'arboressance locale de la machine faisant
+                        tourner master.py
+   - /upload            répertoires des fichiers en départ pour le cloud
+   - /download          répertoires des fichiers reconstitués
+
+ - Sur le slave         représente l'arboressance locale de la machine infectée
+   - /data              répertoires standard de slave des chunks
