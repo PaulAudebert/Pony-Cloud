@@ -19,8 +19,172 @@ import time
 import sqlite3
 import socket
 import hashlib
+import urllib, urllib2
+import getpass
 from itertools import izip, cycle
 from math import ceil
+
+
+def init_db() :
+	"""
+	
+	"""
+	with sqlite3.connect(nom_bdd) as cnx :
+		c = cnx.cursor()
+		
+		c.execute("""
+			CREATE TABLE fichier(
+				id		INTEGER PRIMARY KEY AUTOINCREMENT,
+				droit		VARCHAR(10) not null,
+				proprietaire	VARCHAR(10) not null,
+				groupe		VARCHAR(10) not null,
+				date		DATE TEXT not null,
+				nom		VARCHAR(128) not null unique
+			)""")
+		
+		c.execute("""
+			CREATE TABLE chunk(
+				id		VARCHAR(64) PRIMARY KEY,
+				fichier_id	INTEGER not null,
+				
+				CONSTRAINT fk FOREIGN KEY(fichier_id) REFERENCES fichier(id) ON DELETE CASCADE
+			)""")
+		
+		c.execute("""
+			CREATE TABLE xor(
+				chunkxor_id	VARCHAR(64) not null,
+				chunk_id_A	VARCHAR(64) not null,
+				chunk_id_B	VARCHAR(64) not null,
+				
+				CONSTRAINT fk1 FOREIGN KEY(chunkxor_id) REFERENCES chunk(id),
+				CONSTRAINT fk2 FOREIGN KEY(chunk_id_A) REFERENCES chunk(id) ON DELETE CASCADE,
+				CONSTRAINT fk2 FOREIGN KEY(chunk_id_B) REFERENCES chunk(id) ON DELETE CASCADE,
+				CONSTRAINT pk PRIMARY KEY(chunkxor_id, chunk_id_A, chunk_id_B)
+			)""")
+		
+		c.execute("""
+			CREATE TABLE paire(
+				id		INTEGER PRIMARY KEY,
+				ip		VARCHAR(15),
+				h00		INTEGER DEFAULT 0,
+				h01		INTEGER DEFAULT 0,
+				h02		INTEGER DEFAULT 0,
+				h03		INTEGER DEFAULT 0,
+				h04		INTEGER DEFAULT 0,
+				h05		INTEGER DEFAULT 0,
+				h06		INTEGER DEFAULT 0,
+				h07		INTEGER DEFAULT 0,
+				h08		INTEGER DEFAULT 0,
+				h09		INTEGER DEFAULT 0,
+				h10		INTEGER DEFAULT 0,
+				h11		INTEGER DEFAULT 0,
+				h12		INTEGER DEFAULT 0,
+				h13		INTEGER DEFAULT 0,
+				h14		INTEGER DEFAULT 0,
+				h15		INTEGER DEFAULT 0,
+				h16		INTEGER DEFAULT 0,
+				h17		INTEGER DEFAULT 0,
+				h18		INTEGER DEFAULT 0,
+				h19		INTEGER DEFAULT 0,
+				h20		INTEGER DEFAULT 0,
+				h21		INTEGER DEFAULT 0,
+				h22		INTEGER DEFAULT 0,
+				h23		INTEGER DEFAULT 0
+			)""")
+
+		c.execute("""
+			CREATE TABLE stocker(
+				chunk_id	VARCHAR(64) not null,
+				paire_id	INTEGER not null,
+				
+				CONSTRAINT fk1 FOREIGN KEY(chunk_id) REFERENCES chunk(id) ON DELETE CASCADE,
+				CONSTRAINT fk2 FOREIGN KEY(paire_id) REFERENCES paire(id),
+				CONSTRAINT pk PRIMARY KEY(chunk_id, paire_id)
+			)""")
+		
+		c.execute("""
+			CREATE TRIGGER delete_chunkxor_id BEFORE DELETE ON xor
+			BEGIN
+				DELETE FROM chunk
+				WHERE id = OLD.chunkxor_id;
+			END
+			""")
+
+
+def init_conf(url_auth, url_write, api_dev_key, api_user_name, api_user_password) :
+	"""
+	
+	"""
+	# On demande les paramètres
+	rep = raw_input("IP du serveur [{0}] : ".format(ip_defaut))
+	if rep : conf["ip"] = rep
+	else : conf["ip"] = ip_defaut
+
+	conf["port"] = raw_input("Port TCP [{0}] : ".format(port_defaut))
+	if rep : conf["port"] = rep
+	else : conf["port"] = port_defaut
+
+	conf["chunk_taille"] = raw_input("Taille des chunnk [{0}] : ".format(chunk_taille_defaut))
+	if rep : conf["chunk_taille"] = rep
+	else : conf["chunk_taille"] = chunk_taille_defaut
+
+	conf["reponse"] = raw_input("Réponse standard [{0}] : ".format(reponse_defaut))
+	if rep : conf["reponse"] = rep
+	else : conf["reponse"] = reponse_defaut
+
+	# 1) On prépare les données envoyées en POST pour l'authentification
+	data = urllib.urlencode({
+		"api_dev_key":api_dev_key,
+		"api_user_name":api_user_name,
+		"api_user_password":api_user_password
+		})
+
+	# 2) On prépare la requête
+	requete = urllib2.Request(url_auth, data)
+
+	# 3) On fait la requête, le site nous renvoie normalement la api_user_key
+	page = urllib2.urlopen(requete)
+	api_user_key = page.read()
+
+	# 4) On prépare les données envoyées en POST pour la création d'un pastebin
+	data = urllib.urlencode({
+		"api_dev_key":api_dev_key,
+		"api_user_key":api_user_key,
+		"api_option":"paste",
+		"api_paste_name":"conf",
+		"api_paste_code":"\n".join(["{0}={1}".format(variable, valeur) for variable,valeur in conf.items()])
+		})
+
+	# 5) On prépare la requête
+	requete = urllib2.Request(url_write, data)
+
+	# 6) On fait la requete, le site nous renvoie normalement le clé du pastebin crée
+	page = urllib2.urlopen(requete)
+	retour = page.read()
+	key = retour.split('/')[-1]
+	
+	print("Modifiez le code source de slave.py pour y enregistrer la nouvelle clé : " + key)
+	return key
+
+
+def get_conf(url_read, key) :
+	"""
+	Fonction récupèrant les paramètres à partir deu pastebin
+	"""
+	page = urllib.urlopen(url_read + key)
+	
+	# On parcours chaque ligne du pastebin
+	for ligne in page :
+		
+		# On ne prend pas en compte les commentaire
+		if ligne.startswith('#') : continue
+		
+		# On met notre parametre en dictionnaire
+		variable,valeur = ligne.strip(' \r\n').split('=')
+		if valeur.isdigit() : valeur = int(valeur)
+		conf[variable] = valeur
+	
+	return conf
 
 
 def fichier2id(fichier_nom) :
@@ -128,11 +292,11 @@ def upload1chunk(paire_id, chunk_id, chunk_data) :
 	client.send(chunk_data)
 	
 	# On attend l'acquitement (merci les sockets bloquantes)
-	rep = client.recv(len(reponse))
+	rep = client.recv(len(conf["reponse"]))
 	
 	verrou.release()
 	
-	if rep == reponse :
+	if rep == conf["reponse"] :
 		print("Le chunk {0} de {1} octets à été envoyé".format(chunk_id[:10], len(chunk_data)))
 
 
@@ -271,7 +435,7 @@ def upload(fichier_nom) :
 	
 	# On calcule combien de chunks il faut générer pour le fichier
 	fichier_taille = os.path.getsize(rep_upload + fichier_nom)
-	nb_chunk = ceil(float(fichier_taille) / float(chunk_taille))		# division décimal arrondie à l'entier supérieur si decimales
+	nb_chunk = ceil(float(fichier_taille) / float(conf["chunk_taille"]))		# division décimal arrondie à l'entier supérieur si decimales
 	
 	# On lit n octets du fichier à chaque boucle pour forger les chunks
 	with open(rep_upload + fichier_nom) as fichier :
@@ -280,7 +444,7 @@ def upload(fichier_nom) :
 		while i <= nb_chunk :
 			
 			# On lit n octets du fichier
-			chunk_data = fichier.read(chunk_taille)
+			chunk_data = fichier.read(conf["chunk_taille"])
 			
 			# On génère le chunk_id avec le hash de son contenu
 			chunk_id = hashlib.sha256(chunk_data).hexdigest()
@@ -307,10 +471,10 @@ def download1chunk(paire_id, chunk_id) :
 	client.send(dict_ordre["read"] + chunk_id)
 	
 	# On recoit les données du chunk
-	chunk_data = client.recv(chunk_taille)
+	chunk_data = client.recv(["chunk_taille"])
 	
 	# On envoie l'aquitement
-	client.send(reponse)
+	client.send(conf["reponse"])
 	
 	verrou.release()
 	
@@ -415,7 +579,7 @@ def dereferencer(fichier_nom) :
 	Fonction supprimant de la base de données un fichier.
 	Les ON DELETE CASCADE et le TRIGGER delete_chunkxor_id garderont la base propre
 	"""
-	with sqlite3.connect("{0}.sqlite".format(nom_serveur)) as cnx :
+	with sqlite3.connect(nom_bdd) as cnx :
 		c = cnx.cursor()
 		c.execute("PRAGMA foreign_keys = ON")	# Pour activer les DELETE en cascade
 		c.execute("""
@@ -449,11 +613,11 @@ def delete(fichier_nom, lchunk) :
 		client.send(dict_ordre["delete"] + chunk_id)
 		
 		# On attend l'aquitement (merci les sockets bloquantes)
-		rep = client.recv(len(reponse))
+		rep = client.recv(len(conf["reponse"]))
 		
 		verrou.release()
 		
-		if rep == reponse :
+		if rep == conf["reponse"] :
 			print("Le chunk {0} sur {1} a été supprimé".format(chunk_id[:10], paire_id))
 	
 	# Il faut supprimer le fichier de la base de données
@@ -484,31 +648,6 @@ def ls_paire() :
 	"""
 	global paire
 	print(", ".join([str(paire_id) for paire_id in paire.keys()]))
-
-
-def maj_paire(paire_id) :
-	"""
-	Met à jour le client de stockage
-	"""
-	global paire
-	client = paire[paire_id]
-	
-	verrou.acquire()
-	
-	with open(nom_client) as fichier :
-		fichier_data = fichier.read()
-		
-		# On envoie l'ordre puis la taille du client de stockage ajusté à une fenetre de 64 octets
-		client.send(dict_ordre["maj"] + str(len(fichier_data)).ljust(64))
-		client.send(fichier_data)
-	
-	# On attend l'aquitement (merci les sockets bloquantes)
-	rep = client.recv(len(reponse))
-	
-	verrou.release()
-	
-	if rep == reponse :
-		print("\nLa mise à jour v{0} de {1} octets a été réceptionné par la paire {2}.".format(version, len(fichier_data), paire_id))
 
 
 def quit() :
@@ -555,8 +694,8 @@ def alive(paire_id) :
 			
 			# On maintient la connexion TCP actives
 			verrou.acquire()
-			client.send(dict_ordre["echo"].ljust(64))
-			client.recv(len(reponse))
+			client.send(dict_ordre["echo"])
+			client.recv(len(conf["reponse"]))
 			verrou.release()
 			
 			# On incremente le score/heure de la paire
@@ -580,32 +719,22 @@ def server() :
 	
 	while 1:
 		# On réceptionne la connection entrante
-		client,adresse = s.accept()
+		client,[paire_ip,paire_port] = s.accept()
 		
 		# On enregistre le client dans l'annuaire des paires connectées
 		# notement parce que threading.Thread() ne permet pas d'envoyer
 		# en "args=" un objet socket.client, donc on lui donnera paire_id
 		# et il retrouvera le socket.client via le dictionnaire paire{}
-		paire_id,paire_version = client.recv(32).split()
-		paire_id = int(paire_id)
-		paire_version = float(paire_version)
+		paire_id = int(client.recv(32))
 		paire[paire_id] = client
 		
 		# On enregistre le client dans la base de données
 		with sqlite3.connect(nom_bdd) as cnx :
 			c = cnx.cursor()
 			try :
-				c.execute("INSERT INTO paire(id, version) VALUES({0},{1})".format(paire_id, paire_version))
+				c.execute("INSERT INTO paire(id, ip) VALUES({0},'{1}')".format(paire_id, paire_ip))
 			except sqlite3.IntegrityError :
-				c.execute("UPDATE paire SET version = {1} WHERE id = {0}".format(paire_id, paire_version))
-		
-		# On envoie nos paramètres ajusté dans une fenetre de 32 octets
-		client.send(reponse.ljust(32))
-		client.send(str(chunk_taille).ljust(32))
-		client.send(str(echo_duree).ljust(32))
-		
-		# Et si le client de stockage n'est pas à la dernière version, on lance la mise à jour
-		if paire_version < version : maj_paire(paire_id)
+				c.execute("UPDATE paire SET ip = '{1}' WHERE id = {0}".format(paire_id, paire_ip))
 		
 		# pour finir on met les nouveaux arrivants dans des thread qui maintient en vie leur connexion TCP
 		vivante = threading.Thread(target=alive,args=(paire_id,))
@@ -617,18 +746,30 @@ def server() :
 # Fonction principale							       #
 
 # Paramêtres
+nom_script = os.path.split(sys.argv[0])[1]
+nom_bdd = os.path.splitext(nom_script)[0] + ".sqlite"
+pause = "\n[ENTRER]"
+
 rep_upload = "upload/"
 try : os.mkdir(rep_upload)
 except OSError : pass
+
 rep_download = "download/"
 try : os.mkdir(rep_download)
 except OSError : pass
-version = 0.5
-port = 1212
+
+pastebin = {
+	"url_auth":"http://pastebin.com/api/api_login.php",
+	"url_read":"http://pastebin.com/raw.php?i=",
+	"url_write":"http://pastebin.com/api/api_post.php"
+	}
+ip_defaut = "192.168.59.19"  # Retrouvé l'IP de l'interface ethx serai mieux
+port_defaut = 1212
+chunk_taille_defaut = 10000
+reponse_defaut = "ok"
+
+echo_duree = 10
 nbclient = 10
-chunk_taille = 10000
-paire_id_taille = 3
-reponse = "ok"
 dict_ordre = {
 	"read":"r",
 	"write":"w",
@@ -637,106 +778,34 @@ dict_ordre = {
 	"maj":"%",
 	"quit":"q"
 	}
-echo_duree = 15 # secondes
-pause = "\n[ENTRER]"
 
 # Variables
-paire = {}			# dictionnaire paire_id => socket.client
-verrou = threading.Lock()	# bloquera alive() durant upload(), download() et delete() pour ne pas être parasité par les échos
-nom_serveur = sys.argv[0].split('.')[0]
-nom_client = "slave.py"
-nom_bdd = nom_serveur + ".sqlite"
+conf = {}
+paire = {}		   # dictionnaire paire_id => socket.client
+verrou = threading.Lock()  # bloquera alive() durant upload(), download() et delete() pour ne pas être parasité par les échos
 
-# Mise en place de la base de données si elle n'existe pas déjà
-try :
-	with sqlite3.connect(nom_bdd) as cnx :
-		c = cnx.cursor()
-		
-		c.execute("""
-			CREATE TABLE fichier(
-				id		INTEGER PRIMARY KEY AUTOINCREMENT,
-				droit		VARCHAR(10) not null,
-				proprietaire	VARCHAR(10) not null,
-				groupe		VARCHAR(10) not null,
-				date		DATE TEXT not null,
-				nom		VARCHAR(128) not null unique
-			)""")
-		
-		c.execute("""
-			CREATE TABLE chunk(
-				id		VARCHAR(64) PRIMARY KEY,
-				fichier_id	INTEGER not null,
-				
-				CONSTRAINT fk FOREIGN KEY(fichier_id) REFERENCES fichier(id) ON DELETE CASCADE
-			)""")
-		
-		c.execute("""
-			CREATE TABLE xor(
-				chunkxor_id	VARCHAR(64) not null,
-				chunk_id_A	VARCHAR(64) not null,
-				chunk_id_B	VARCHAR(64) not null,
-				
-				CONSTRAINT fk1 FOREIGN KEY(chunkxor_id) REFERENCES chunk(id),
-				CONSTRAINT fk2 FOREIGN KEY(chunk_id_A) REFERENCES chunk(id) ON DELETE CASCADE,
-				CONSTRAINT fk2 FOREIGN KEY(chunk_id_B) REFERENCES chunk(id) ON DELETE CASCADE,
-				CONSTRAINT pk PRIMARY KEY(chunkxor_id, chunk_id_A, chunk_id_B)
-			)""")
-
-		c.execute("""
-			CREATE TABLE paire(
-				id		INTEGER PRIMARY KEY,
-				version		FLOAT,
-				h00		INTEGER DEFAULT 0,
-				h01		INTEGER DEFAULT 0,
-				h02		INTEGER DEFAULT 0,
-				h03		INTEGER DEFAULT 0,
-				h04		INTEGER DEFAULT 0,
-				h05		INTEGER DEFAULT 0,
-				h06		INTEGER DEFAULT 0,
-				h07		INTEGER DEFAULT 0,
-				h08		INTEGER DEFAULT 0,
-				h09		INTEGER DEFAULT 0,
-				h10		INTEGER DEFAULT 0,
-				h11		INTEGER DEFAULT 0,
-				h12		INTEGER DEFAULT 0,
-				h13		INTEGER DEFAULT 0,
-				h14		INTEGER DEFAULT 0,
-				h15		INTEGER DEFAULT 0,
-				h16		INTEGER DEFAULT 0,
-				h17		INTEGER DEFAULT 0,
-				h18		INTEGER DEFAULT 0,
-				h19		INTEGER DEFAULT 0,
-				h20		INTEGER DEFAULT 0,
-				h21		INTEGER DEFAULT 0,
-				h22		INTEGER DEFAULT 0,
-				h23		INTEGER DEFAULT 0
-			)""")
-
-		c.execute("""
-			CREATE TABLE stocker(
-				chunk_id	VARCHAR(64) not null,
-				paire_id	INTEGER not null,
-				
-				CONSTRAINT fk1 FOREIGN KEY(chunk_id) REFERENCES chunk(id) ON DELETE CASCADE,
-				CONSTRAINT fk2 FOREIGN KEY(paire_id) REFERENCES paire(id),
-				CONSTRAINT pk PRIMARY KEY(chunk_id, paire_id)
-			)""")
-		
-		c.execute("""
-			CREATE TRIGGER delete_chunkxor_id BEFORE DELETE ON xor
-			BEGIN
-				DELETE FROM chunk
-				WHERE id = OLD.chunkxor_id;
-			END
-			""")
-		
-# Pour le déboguage
+# Mise en place de la base de données
+try : init_db()
 except sqlite3.OperationalError : pass
 
+# Mise en place de la configuration
+pastebin["key"] = raw_input("Donnez la clé du pastebin de configuration : ")
+if not pastebin["key"] :
+	pastebin["api_dev_key"] = raw_input("Donnez l'api_dev_key : ")
+	if not pastebin["api_dev_key"] : sys.exit(1)
+	pastebin["api_user_name"] = raw_input("Donnez l'api_user_name : ")
+	if not pastebin["api_dev_key"] : sys.exit(1)
+	pastebin["api_user_password"] = getpass.getpass("Donnez l'api_user_password : ")
+	if not pastebin["api_dev_key"] : sys.exit(1)
+	
+	pastebin["key"] = init_conf(pastebin["url_auth"], pastebin["url_write"], pastebin["api_dev_key"], pastebin["api_user_name"], pastebin["api_user_password"])
+
+conf = get_conf(pastebin["url_read"], pastebin["key"])
+
 # On ouvre une socket qui accepte les connexions de n'importe qui sur le port 1212 pour n client
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)	# vérifier si "socket.socket()" marche aussi
+s = socket.socket()
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	# cette ligne évite "socket.error: [Errno 98] Address already in use"
-s.bind(("",port))
+s.bind(("",conf["port"]))
 s.listen(nbclient)
 
 # Lancement de notre serveur TCP en démon
@@ -815,9 +884,12 @@ try :
 		
 		# DEBOGUE : remplir la base de données
 		elif choix == '7' :
+			lpaire_id = paire.keys()
+			if len(lpaire_id) == 3 : continue
+			
 			with sqlite3.connect(nom_bdd) as cnx :
 				c = cnx.cursor()
-				lpaire_id = paire.keys()
+				
 				c.execute("""
 					INSERT INTO paire(h18, h19, h20, h21, h22, h23, h0, h1, h2)
 					VALUES(2,1,10,17,20,18,10,1,1)
