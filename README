@@ -1,19 +1,32 @@
 				README
 
-Pony Cloud se compose des parties suivante
+Fonctionnement :
+  Les données sont découpées et distribuées selon le principe du RAID et les 
+  meta-données sont réparties puis répliquées sur chaque paires dans une bases
+  de données Sqlite.
 
- - master.py                      le serveur de commande et controle (C&C)
- - master.sqlite                  la base de données où tous est enregistré
- - slave.py                       le client pour les noeud du cloud
- - slave.id                       l'identifiant unique du noeud
- - http://pastebin.com/4KT5y5Ex   les parametres public pour joindre le C&C
+Prérequi :
+ - python
+ - python-webpy
+ - python-sqlite
+ - bibliotheque Debogue (voir le github correspondant)
+ - Genexe (voir le github correspondant)
 
+Architecture
+  pony2pony
+    |
+    |_ objet
+    |
+    |_ init
+    |    |_ objet
+    |
+    |_ client
+    |    |_ urllib2, xml
+    |
+    |_ serveur
+         |_ web
 
-Les répertoires :
-
- - Sur le master
-   - /upload            répertoires des fichiers en départ pour le cloud
-   - /download          répertoires des fichiers reconstitués
-
- - Sur le slave
-   - /data              répertoires des chunks
+Convention :
+  chemin => URI absolu d'une resource (comprenant son nom & extention)
+  rep => répertoire absolu d'une resource (sans son nom donc)
+  
