@@ -3,6 +3,8 @@
 
 import __builtin__
 import sys
+import logging
+import logging.handlers
 import time.time
 import random.sample
 import hashlib.sha256
@@ -12,10 +14,6 @@ import web; web.config.debug = False
 import socket.error
 from objet import *
 from serveur import Login_bdd, Login_p2p, Validation
-
-# Debogue
-sys.path.append("../Debogue")
-from debogue import *
 
 main = sys.modules['__main__']
 
@@ -203,7 +201,7 @@ class index(object) :
 			caracteres = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\
 				OPQRSTUVWXYZ1234567890&#{}()|-_^@=$%<>!:;.,?"
 			mot_de_passe_clair = ''.join(random.sample(caracteres, 8))
-			DEBOGUE().trace("mot_de_passe_clair", mot_de_passe_clair)
+			log.debug("mot_de_passe_clair", mot_de_passe_clair)
 			unutilisateur.mot_de_passe = hashlib.sha256(mot_de_passe_clair).hexdigest()
 			unutilisateur.date = time.time()
 			message = "{0.id}\n{0.mot_de_passe}\n{0.courriel}\n{0.date}".format(unutilisateur)
@@ -518,7 +516,7 @@ def interface() :
 	try :
 		urllib2.urlopen("http://{0.ip}:{0.port}/".format(main.maconf.master), None, 3)
 		urls = ("/(.*)",		"index2")
-		DEBOGUE().trace("ICI", "/(.*) => index2")
+		log.debug("ICI", "/(.*) => index2")
 		
 	except urllib2.URLError :
 		urls = ("/",			"index",
@@ -559,7 +557,7 @@ def interface() :
 			#"tchat.png" : "http://img849.imageshack.us/img849/5558/tchat.png",
 			"titre.png" : "http://img208.imageshack.us/img208/1166/titret.png"}
 		
-		DEBOGUE().trace("ICI", "/... => index, etc")
+		log.debug("ICI", "/... => index, etc")
 	
 	sys.stdout.write("Interface d'administration à l'adresse ")
 	sys.argv = sys.argv[0], str(main.maconf.moi.port + 1)

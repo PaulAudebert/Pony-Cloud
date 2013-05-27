@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import sys, shutil
+import logging
+import logging.handlers
 import threading
 import time.sleep
 import hashlib.sha256
@@ -11,11 +13,6 @@ from xml.dom import minidom
 import re
 from objet import *
 
-# Debogue
-import sys
-sys.path.append("../Debogue")
-from debogue import *
-
 main = sys.modules['__main__']
 
 def post(ip, port, page, valeur) :
@@ -24,7 +21,7 @@ def post(ip, port, page, valeur) :
 	"""
 	# On prépare la requête
 	url = "http://{0}:{1}/{2}".format(ip, port, page)
-	#DEBOGUE().trace("post()", url)
+	#log.debug("post()", url)
 	donnees = urllib.urlencode(valeur)
 	requete = urllib2.Request(url, donnees)
 	
@@ -124,7 +121,7 @@ def attaque(ip, port) :
 		and main.maconf.master.date < unmaster.date :
 			main.maconf.master = unmaster
 			main.maconf.master.save()
-			DEBOGUE().trace("ICI", "mis à jour du master")
+			log.debug("ICI", "mis à jour du master")
 			main.status = "reload"
 		
 	except IndexError : pass
@@ -260,7 +257,7 @@ def ecouter_paire() :
 	while True :
 		for unepaire in main.maconf.paires.values() :
 			if not unepaire.ip in [main.maconf.moi.ip, main.maconf.master.ip] :
-				#DEBOGUE().trace("ICI", "ecouter_paire()")
+				#log.debug("ICI", "ecouter_paire()")
 				attaque(unepaire.ip, unepaire.port)
 		
 		time.sleep(600)  # 10 minutes
@@ -275,7 +272,7 @@ def explorer() :
 		if main.maconf.contacts :
 			for uncontact in main.maconf.contacts.values() :
 				if uncontact.ip != main.maconf.moi.ip :
-					#DEBOGUE().trace("attaque", "contact")
+					#log.debug("attaque", "contact")
 					attaque(uncontact.ip, uncontact.port)
 				
 				main.maconf.contacts.pop(uncontact.ip)
@@ -303,7 +300,7 @@ def explorer() :
 			for i in range(10,30) :
 				ip = "192.168.99." + str(i)
 				if ip != main.maconf.moi.ip :
-					#DEBOGUE().trace("attaque", "plage")
+					#log.debug("attaque", "plage")
 					attaque(ip, 1212)
 		
 		time.sleep(3600)  # 1 heure
@@ -315,7 +312,7 @@ def maj_ip() :
 	"""
 	while True :
 		#try :
-			##DEBOGUE().trace("ICI", "mon-ip.com")
+			##log.debug("ICI", "mon-ip.com")
 			#opener = urllib2.build_opener()
 			#opener.addheaders = [('User-agent', 'Mozilla/5.0')]
 			#html = opener.open("http://mon-ip.com/").read()
@@ -323,7 +320,7 @@ def maj_ip() :
 			#ip = regex.findall(html)[0]
 			
 		#except urllib2.URLError :
-			##DEBOGUE().trace("ICI", "showmyip.co")
+			##log.debug("ICI", "showmyip.co")
 			#ip_xml = minidom.parse(urllib2.urlopen("http://www.showmyip.com/xml/"))
 			#ip = str(ip_xml.getElementsByTagName('ip')[0].childNodes[0].nodeValue)
 		
@@ -335,14 +332,14 @@ def maj_ip() :
 		
 		if main.maconf.moi.ip != ip :
 			main.maconf.moi.date = time.time()
-			#DEBOGUE().trace("moi.date", main.maconf.moi.date)
+			#log.debug("moi.date", main.maconf.moi.date)
 			message = "{0.id}\n{0.ip}\n{0.port}\n{0.espace}\n\
 				{0.espace_consome}\n{0.privilege}\n{0.systeme}\n\
 				{0.arch}\n{0.sha256}\n{0.date}".format(main.maconf.moi)
 			main.maconf.moi.signature = main.maconf.moi.cle_privee.sign(message, None)[0]
-			#DEBOGUE().trace("moi.signature", main.maconf.moi.signature)
+			#log.debug("moi.signature", main.maconf.moi.signature)
 			main.maconf.moi.save()
-			DEBOGUE().trace("ICI", "mise a jour de l'IP")
+			log.debug("ICI", "mise a jour de l'IP")
 		
 		time.sleep(3600)  # 1 heure
 
@@ -366,9 +363,9 @@ def mise_a_jour() :
 				shutil.move(main.maconf.executable, main.maconf.executable + ".old")
 				open(main.maconf.executable, 'w').write(contenu)
 				os.chmod(main.maconf.executable, stat.S_IRWXU)
-				DEBOGUE().trace("ICI", "mise à jour du logiciel")
+				log.debug("ICI", "mise à jour du logiciel")
 				main.status = "restart"
-				DEBOGUE().trace("main.status", main.status)
+				log.debug("main.status", main.status)
 		
 		time.sleep(3600)  # 1 heure
 

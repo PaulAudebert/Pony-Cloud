@@ -2,13 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import logging
+import logging.handlers
 if sys.platform.startswith("win") : sys.path.append("C:\\Python27\\lib\\webpy")
 import web; web.config.debug = False
 from objet import *
-
-# Debogue
-sys.path.append("../Debogue")
-from debogue import *
 
 main = sys.modules['__main__']
 
@@ -232,7 +230,7 @@ class commande(object) :
 				return template_xml(contenu)
 				
 			except IndexError :
-				DEBOGUE().trace("ICI", "aucun ordre en stack")
+				log.debug("ICI", "aucun ordre en stack")
 				#return template_xml('')
 				raise web.notfound()
 			

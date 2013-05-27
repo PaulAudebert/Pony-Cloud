@@ -5,15 +5,10 @@ import os, sys
 import sqlite3
 from Crypto.PublicKey.RSA import importKey
 
-# Debogue
-sys.path.append("../Debogue")
-from debogue import *
-
 main = sys.modules['__main__']
 
 class Conf(object) :
 	def __init__(self) :
-		self.mode = str()
 		self.monchemin = os.path.abspath(sys.argv[0])
 		self.monrep = os.path.dirname(self.monchemin)
 		self.executable = os.path.basename(self.monchemin)
